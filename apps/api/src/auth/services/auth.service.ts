@@ -115,21 +115,17 @@ export class AuthService {
       const user = await this.userRepo.findByEmail(dto.email)
       if (!user) throw new BadRequestException('User not found')
 
-      // --- Lấy code EMAIL_VERIFY còn hạn (mới nhất) ---
       const record = await this.verificationRepo.findValidCodeByUser(
         user.id,
         'EMAIL_VERIFY',
       )
       if (!record) throw new BadRequestException('Invalid or expired code')
 
-      // --- So sánh code plaintext vs hash ---
       const isValid = await compareCode(dto.code, record.code)
       if (!isValid) throw new BadRequestException('Invalid or expired code')
 
-      // --- Cập nhật verified ---
       await this.userRepo.updateEmailVerified(user.id)
 
-      // --- Xóa code đã dùng ---
       await this.verificationRepo.delete(record.id)
 
       return { message: 'Email verified successfully' }
@@ -144,7 +140,6 @@ export class AuthService {
       const user = await this.userRepo.findByEmail(email)
       if (!user) throw new BadRequestException('User not found')
 
-      // --- Check nếu user còn code PASSWORD_RESET chưa hết hạn ---
       const existing = await this.verificationRepo.findValidCodeByUser(
         user.id,
         'PASSWORD_RESET',
@@ -183,22 +178,18 @@ export class AuthService {
       const user = await this.userRepo.findByEmail(email)
       if (!user) throw new BadRequestException('User not found')
 
-      // --- Lấy record PASSWORD_RESET còn hạn (mới nhất) ---
       const record = await this.verificationRepo.findValidCodeByUser(
         user.id,
         'PASSWORD_RESET',
       )
       if (!record) throw new BadRequestException('Invalid or expired code')
 
-      // --- So sánh code plaintext vs hash ---
       const isValid = await compareCode(code, record.code)
       if (!isValid) throw new BadRequestException('Invalid or expired code')
 
-      // --- Update password ---
       const passwordHash = await hashPassword(newPassword)
       await this.userRepo.updatePassword(user.id, passwordHash)
 
-      // --- Xóa code đã dùng ---
       await this.verificationRepo.delete(record.id)
 
       return { message: 'Password reset successfully' }

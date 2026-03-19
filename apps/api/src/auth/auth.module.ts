@@ -11,6 +11,7 @@ import { JwtTokenService } from './services/jwt-token.service'
 
 import { PrismaService } from '../prisma/prisma.service'
 import { EmailService } from 'src/mail/email.service'
+import { JwtAuthGuard } from './guards/jwt-auth.guard'
 
 @Module({
   imports: [
@@ -31,8 +32,9 @@ import { EmailService } from 'src/mail/email.service'
     PrismaService,
     JwtTokenService,
     EmailService,
+    JwtAuthGuard,
   ],
 
-  exports: [JwtTokenService],
+  exports: [JwtTokenService, JwtAuthGuard],
 })
 export class AuthModule {}
