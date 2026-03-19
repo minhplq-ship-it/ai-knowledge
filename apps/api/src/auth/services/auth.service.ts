@@ -63,7 +63,9 @@ export class AuthService {
     }
 
     const valid = await comparePassword(dto.password, user.passwordHash)
-
+    if (!user.isVerified) {
+      throw new BadRequestException('Email not verified')
+    }
     if (!valid) {
       throw new BadRequestException('Invalid credentials')
     }

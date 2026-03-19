@@ -1,5 +1,18 @@
 {
   "devDependencies": {
+    "@types/passport": "^1.0.17",
     "eslint-config-prettier": "^10.1.8"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.17",
+    "@nestjs/core": "^11.1.17",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/passport": "^11.0.5",
+    "@nestjs/platform-express": "^11.1.17",
+    "@prisma/client": "^5.22.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "passport": "^0.7.0",
+    "prisma": "^5.22.0"
   }
 }
