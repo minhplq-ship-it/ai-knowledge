@@ -58,16 +58,18 @@ model Document {
 
   chunks DocumentChunk[]
 }
-
 model DocumentChunk {
-  id         String @id @default(uuid())
+  id         String   @id @default(uuid())
   content    String
   chunkIndex Int
+  metadata   Json?    // ← thêm: charStart, charEnd, tokenEstimate
+
+  createdAt  DateTime @default(now())  // ← thêm: tracking
 
   documentId String
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
-  embedding Embedding?
+  embedding  Embedding?
 }
 
 model Embedding {
