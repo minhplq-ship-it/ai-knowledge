@@ -1,5 +1,6 @@
 // src/document/services/document-processing.service.ts
 import { Injectable, Logger } from '@nestjs/common'
+import { EmbeddingService } from 'src/document/embedding/embedding.service'
 import { PrismaService } from 'src/prisma/prisma.service'
 
 /**
@@ -29,7 +30,10 @@ const DEFAULT_CONFIG: ChunkingConfig = {
 export class DocumentProcessingService {
   private readonly logger = new Logger(DocumentProcessingService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly embeddingService: EmbeddingService,
+  ) {}
 
   /**
    * Entry point: idempotent — gọi lại sẽ xóa chunk cũ và tạo lại.
@@ -78,6 +82,7 @@ export class DocumentProcessingService {
     ])
 
     this.logger.log(`Document ${documentId}: processed ${chunks.length} chunks`)
+    await this.embeddingService.embedDocument(documentId)
   }
 
   // ─────────────────────────────────────────────────────────────

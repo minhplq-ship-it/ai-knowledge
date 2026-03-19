@@ -10,6 +10,8 @@ import { DocxParser } from './parsers/docx.parser'
 import { PdfParser } from './parsers/pdf.parser'
 import { TxtParser } from './parsers/txt.parser'
 import { DocumentProcessingService } from './services/document-processing.service'
+import { SearchService } from './search/search.service'
+import { EmbeddingService } from './embedding/embedding.service'
 
 @Module({
   controllers: [DocumentController],
@@ -22,9 +24,11 @@ import { DocumentProcessingService } from './services/document-processing.servic
     PdfParser,
     DocxParser,
     ParserFactory,
-    DocumentProcessingService
+    DocumentProcessingService,
+    EmbeddingService,
+    SearchService,
   ],
-  exports: [DocumentService],
+  exports: [DocumentService, SearchService],
   imports: [AuthModule],
 })
 export class DocumentModule {}
