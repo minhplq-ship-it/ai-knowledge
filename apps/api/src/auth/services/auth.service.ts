@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException } from '@nestjs/common'
+import {
+  Injectable,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common'
 
 import { RegisterDto } from '../dto/register.dto'
 import { LoginDto } from '../dto/login.dto'
@@ -9,7 +13,12 @@ import { VerificationRepository } from '../repositories/verification.repository'
 
 import { hashPassword, comparePassword } from '../utils/password.util'
 import { JwtTokenService } from './jwt-token.service'
-import { generateOtp } from '../utils/otp.util'
+import {
+  generateOtp,
+  getOtpExpiry,
+  hashCode,
+  compareCode,
+} from '../utils/otp.util'
 
 import { EmailService } from 'src/mail/email.service'
 
@@ -22,87 +31,180 @@ export class AuthService {
     private emailService: EmailService,
   ) {}
   async register(dto: RegisterDto) {
-    const existing = await this.userRepo.findByEmail(dto.email)
+    try {
+      const existingUser = await this.userRepo.findByEmail(dto.email)
+      if (existingUser) throw new BadRequestException('Email already exists')
 
-    if (existing) {
-      throw new BadRequestException('Email already exists')
-    }
+      const passwordHash = await hashPassword(dto.password)
+      const user = await this.userRepo.create({
+        name: dto.name,
+        email: dto.email,
+        passwordHash,
+      })
 
-    const passwordHash = await hashPassword(dto.password)
+      // --- Kiểm tra xem user có code EMAIL_VERIFY còn hạn không ---
+      const existingCode = await this.verificationRepo.findValidCodeByUser(
+        user.id,
+        'EMAIL_VERIFY',
+      )
+      if (existingCode) {
+        throw new BadRequestException(
+          `You already have a verification code. Please wait until it expires at ${existingCode.expiresAt.toLocaleTimeString()}`,
+        )
+      }
 
-    const user = await this.userRepo.create({
-      name: dto.name,
-      email: dto.email,
-      passwordHash,
-    })
+      // --- Tạo code mới ---
+      const code = generateOtp()
+      const hashedCode = await hashCode(code)
+      const expiresAt = getOtpExpiry(10) // 10 phút
 
-    const code = generateOtp()
+      await this.verificationRepo.create({
+        userId: user.id,
+        code: hashedCode,
+        type: 'EMAIL_VERIFY',
+        expiresAt,
+      })
 
-    await this.verificationRepo.create({
-      userId: user.id,
-      code,
-      type: 'EMAIL_VERIFY',
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
-    })
+      await this.emailService.sendVerifyEmail({
+        email: user.email,
+        name: user.name,
+        code, // gửi plaintext
+      })
 
-    await this.emailService.sendVerifyEmail({
-      email: user.email,
-      name: user.name,
-      code,
-    })
-
-    return {
-      message: 'Verification email sent',
+      return { message: 'Verification email sent' }
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err
+      throw new InternalServerErrorException(err.message)
     }
   }
+
   async login(dto: LoginDto) {
-    const user = await this.userRepo.findByEmail(dto.email)
+    try {
+      const user = await this.userRepo.findByEmail(dto.email)
 
-    if (!user) {
-      throw new BadRequestException('Invalid credentials')
-    }
+      if (!user) {
+        throw new BadRequestException('Invalid credentials')
+      }
 
-    const valid = await comparePassword(dto.password, user.passwordHash)
-    if (!user.isVerified) {
-      throw new BadRequestException('Email not verified')
-    }
-    if (!valid) {
-      throw new BadRequestException('Invalid credentials')
-    }
+      const valid = await comparePassword(dto.password, user.passwordHash)
 
-    const token = this.jwtService.generateToken({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    })
+      if (!user.isVerified) {
+        throw new BadRequestException('Email not verified')
+      }
 
-    return {
-      accessToken: token,
+      if (!valid) {
+        throw new BadRequestException('Invalid credentials')
+      }
+
+      const token = this.jwtService.generateToken({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+      })
+
+      return {
+        accessToken: token,
+      }
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err
+      throw new InternalServerErrorException(err.message)
     }
   }
   async verifyEmail(dto: VerifyEmailDto) {
-    const user = await this.userRepo.findByEmail(dto.email)
+    try {
+      const user = await this.userRepo.findByEmail(dto.email)
+      if (!user) throw new BadRequestException('User not found')
 
-    if (!user) {
-      throw new BadRequestException('User not found')
+      // --- Lấy code EMAIL_VERIFY còn hạn (mới nhất) ---
+      const record = await this.verificationRepo.findValidCodeByUser(
+        user.id,
+        'EMAIL_VERIFY',
+      )
+      if (!record) throw new BadRequestException('Invalid or expired code')
+
+      // --- So sánh code plaintext vs hash ---
+      const isValid = await compareCode(dto.code, record.code)
+      if (!isValid) throw new BadRequestException('Invalid or expired code')
+
+      // --- Cập nhật verified ---
+      await this.userRepo.updateEmailVerified(user.id)
+
+      // --- Xóa code đã dùng ---
+      await this.verificationRepo.delete(record.id)
+
+      return { message: 'Email verified successfully' }
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err
+      throw new InternalServerErrorException(err.message)
     }
+  }
 
-    const record = await this.verificationRepo.findValidCode(
-      user.id,
-      dto.code,
-      'EMAIL_VERIFY',
-    )
+  async requestReset(email: string) {
+    try {
+      const user = await this.userRepo.findByEmail(email)
+      if (!user) throw new BadRequestException('User not found')
 
-    if (!record) {
-      throw new BadRequestException('Invalid or expired code')
+      // --- Check nếu user còn code PASSWORD_RESET chưa hết hạn ---
+      const existing = await this.verificationRepo.findValidCodeByUser(
+        user.id,
+        'PASSWORD_RESET',
+      )
+      if (existing) {
+        throw new BadRequestException(
+          `You already have a password reset code. Please wait until it expires at ${existing.expiresAt.toLocaleTimeString()}`,
+        )
+      }
+
+      const code = generateOtp()
+      const hashedCode = await hashCode(code)
+      const expiresAt = getOtpExpiry(10) // 10 phút
+
+      await this.verificationRepo.create({
+        userId: user.id,
+        code: hashedCode,
+        type: 'PASSWORD_RESET',
+        expiresAt,
+      })
+
+      await this.emailService.sendForgotPasswordEmail({
+        email: user.email,
+        name: user.name,
+        code,
+      })
+
+      return { message: 'Password reset email sent' }
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err
+      throw new InternalServerErrorException(err.message)
     }
+  }
+  async resetPassword(email: string, code: string, newPassword: string) {
+    try {
+      const user = await this.userRepo.findByEmail(email)
+      if (!user) throw new BadRequestException('User not found')
 
-    await this.userRepo.updateEmailVerified(user.id)
+      // --- Lấy record PASSWORD_RESET còn hạn (mới nhất) ---
+      const record = await this.verificationRepo.findValidCodeByUser(
+        user.id,
+        'PASSWORD_RESET',
+      )
+      if (!record) throw new BadRequestException('Invalid or expired code')
 
-    await this.verificationRepo.delete(record.id)
+      // --- So sánh code plaintext vs hash ---
+      const isValid = await compareCode(code, record.code)
+      if (!isValid) throw new BadRequestException('Invalid or expired code')
 
-    return {
-      message: 'Email verified successfully',
+      // --- Update password ---
+      const passwordHash = await hashPassword(newPassword)
+      await this.userRepo.updatePassword(user.id, passwordHash)
+
+      // --- Xóa code đã dùng ---
+      await this.verificationRepo.delete(record.id)
+
+      return { message: 'Password reset successfully' }
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err
+      throw new InternalServerErrorException(err.message)
     }
   }
 }

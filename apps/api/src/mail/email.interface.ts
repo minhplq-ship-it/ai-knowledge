@@ -3,3 +3,9 @@ export interface VerifyEmailPayload {
   code: string
   name?: string
 }
+
+export interface ForgotPasswordPayload {
+  email: string
+  code: string
+  name?: string
+}

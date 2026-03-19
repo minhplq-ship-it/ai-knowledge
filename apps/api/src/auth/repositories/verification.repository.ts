@@ -44,7 +44,20 @@ export class VerificationRepository {
       },
     })
   }
-
+  async findValidCodeByUser(userId: string, type: VerificationType) {
+    return this.prisma.verificationCode.findFirst({
+      where: {
+        userId,
+        type,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+  }
   async deleteExpired() {
     return this.prisma.verificationCode.deleteMany({
       where: {

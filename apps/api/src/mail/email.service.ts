@@ -4,7 +4,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as handlebars from 'handlebars'
 
-import { VerifyEmailPayload } from './email.interface'
+import { VerifyEmailPayload,ForgotPasswordPayload } from './email.interface'
 
 @Injectable()
 export class EmailService {
@@ -38,6 +38,19 @@ export class EmailService {
       from: process.env.MAIL_FROM,
       to: payload.email,
       subject: 'Verify your email',
+      html,
+    })
+  }
+  async sendForgotPasswordEmail(payload: ForgotPasswordPayload) {
+    const html = this.compileTemplate('forgot-password', {
+      code: payload.code,
+      name: payload.name ?? 'User',
+    })
+
+    await this.transporter.sendMail({
+      from: process.env.MAIL_FROM,
+      to: payload.email,
+      subject: 'Reset your password',
       html,
     })
   }
