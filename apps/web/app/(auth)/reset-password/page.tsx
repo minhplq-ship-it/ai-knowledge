@@ -1,7 +1,7 @@
 'use client'
 
 // app/(auth)/reset-password/page.tsx
-import { useState, useRef, useEffect } from 'react'
+import { Suspense, useState, useRef, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,7 @@ import { Bot, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const email = searchParams.get('email') ?? ''
@@ -49,7 +49,6 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const code = otp.join('')
-
     if (code.length !== 6) {
       toast.error('Please enter the 6-digit code')
       return
@@ -62,7 +61,6 @@ export default function ResetPasswordPage() {
       toast.error('Passwords do not match')
       return
     }
-
     try {
       setLoading(true)
       await api.post('/auth/reset-password', { email, code, newPassword })
@@ -80,7 +78,6 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-8">
-
         <div className="flex flex-col items-center gap-3">
           <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-primary">
             <Bot className="w-6 h-6 text-primary-foreground" />
@@ -94,7 +91,6 @@ export default function ResetPasswordPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* OTP */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Verification code</label>
             <div className="flex justify-between gap-2">
@@ -120,7 +116,6 @@ export default function ResetPasswordPage() {
             </div>
           </div>
 
-          {/* New password */}
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="newPassword">New password</label>
             <Input
@@ -135,7 +130,6 @@ export default function ResetPasswordPage() {
             />
           </div>
 
-          {/* Confirm password */}
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="confirmPassword">Confirm password</label>
             <Input
@@ -153,12 +147,22 @@ export default function ResetPasswordPage() {
           <Button type="submit" className="w-full h-10" disabled={loading}>
             {loading ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Resetting...</>
-            ) : (
-              'Reset password'
-            )}
+            ) : 'Reset password'}
           </Button>
         </form>
       </div>
     </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <ResetPasswordContent />
+    </Suspense>
   )
 }

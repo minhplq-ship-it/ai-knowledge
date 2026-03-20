@@ -1,7 +1,7 @@
 'use client'
 
 // app/(auth)/verify-email/page.tsx
-import { useState, useRef, useEffect } from 'react'
+import { Suspense, useState, useRef, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,7 @@ import { Bot, Loader2, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const email = searchParams.get('email') ?? ''
@@ -25,26 +25,17 @@ export default function VerifyEmailPage() {
   }, [])
 
   const handleChange = (index: number, value: string) => {
-    // Chỉ nhận số
     if (!/^\d*$/.test(value)) return
-
     const next = [...otp]
-    next[index] = value.slice(-1) // chỉ lấy 1 ký tự
+    next[index] = value.slice(-1)
     setOtp(next)
-
-    // Auto focus ô tiếp theo
-    if (value && index < 5) {
-      inputs.current[index + 1]?.focus()
-    }
-
-    // Auto submit khi điền đủ 6 số
+    if (value && index < 5) inputs.current[index + 1]?.focus()
     if (next.every((d) => d !== '') && index === 5) {
       handleVerify(next.join(''))
     }
   }
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-    // Backspace → focus ô trước
     if (e.key === 'Backspace' && !otp[index] && index > 0) {
       inputs.current[index - 1]?.focus()
     }
@@ -90,8 +81,6 @@ export default function VerifyEmailPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-8">
-
-        {/* Icon + heading */}
         <div className="flex flex-col items-center gap-3">
           <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-primary">
             <Bot className="w-6 h-6 text-primary-foreground" />
@@ -108,7 +97,6 @@ export default function VerifyEmailPage() {
           </div>
         </div>
 
-        {/* OTP inputs */}
         <div className="flex justify-center gap-2">
           {otp.map((digit, i) => (
             <input
@@ -132,7 +120,6 @@ export default function VerifyEmailPage() {
           ))}
         </div>
 
-        {/* Loading state */}
         {loading && (
           <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -140,7 +127,6 @@ export default function VerifyEmailPage() {
           </div>
         )}
 
-        {/* Resend */}
         <div className="text-center space-y-3">
           <p className="text-sm text-muted-foreground">Didn&apos;t receive the code?</p>
           <Button
@@ -151,16 +137,23 @@ export default function VerifyEmailPage() {
             className="text-sm"
           >
             {resending ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                Sending...
-              </>
-            ) : (
-              'Resend code'
-            )}
+              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Sending...</>
+            ) : 'Resend code'}
           </Button>
         </div>
       </div>
     </div>
+  )
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <VerifyEmailContent />
+    </Suspense>
   )
 }
