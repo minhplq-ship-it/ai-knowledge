@@ -20,7 +20,6 @@ export class SearchService {
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
   ) {}
-
   async search(
     query: string,
     userId: string,
@@ -30,20 +29,20 @@ export class SearchService {
     const vectorStr = `[${queryVector.join(',')}]`
 
     const results = await this.prisma.$queryRaw<SearchResult[]>`
-      SELECT
-        dc.id            AS "chunkId",
-        dc."documentId",
-        d.title          AS "documentTitle",
-        dc.content,
-        1 - (e.vector <=> ${vectorStr}::vector) AS similarity
-      FROM "Embedding"     e
-      JOIN "DocumentChunk" dc ON dc.id = e."chunkId"
-      JOIN "Document"      d  ON d.id  = dc."documentId"
-      WHERE d."userId" = ${userId}
-        AND 1 - (e.vector <=> ${vectorStr}::vector) > 0.3
-      ORDER BY e.vector <=> ${vectorStr}::vector
-      LIMIT ${topK}
-    `
+    SELECT
+      dc.id                                                AS "chunkId",
+      dc."documentId",
+      d.title                                              AS "documentTitle",
+      dc.content,
+      (1 - (e.vector <=> ${vectorStr}::vector))::float8   AS similarity
+    FROM "Embedding"     e
+    JOIN "DocumentChunk" dc ON dc.id = e."chunkId"
+    JOIN "Document"      d  ON d.id  = dc."documentId"
+    WHERE d."userId" = ${userId}
+      AND (1 - (e.vector <=> ${vectorStr}::vector)) > 0.5
+    ORDER BY e.vector <=> ${vectorStr}::vector
+    LIMIT ${topK}
+  `
 
     return results
   }

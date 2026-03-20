@@ -1,3 +1,4 @@
+// src/document/services/embedding.service.ts
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from 'src/prisma/prisma.service'
 import OpenAI from 'openai'
@@ -6,7 +7,6 @@ import OpenAI from 'openai'
 export class EmbeddingService {
   private readonly logger = new Logger(EmbeddingService.name)
   private readonly openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-
   private readonly EMBED_MODEL = 'text-embedding-3-small'
 
   constructor(private readonly prisma: PrismaService) {}
@@ -15,7 +15,7 @@ export class EmbeddingService {
     const chunks = await this.prisma.documentChunk.findMany({
       where: {
         documentId,
-        embedding: null, // chỉ lấy chunk chưa embed — idempotent
+        embedding: null,
       },
     })
 
@@ -28,13 +28,16 @@ export class EmbeddingService {
       `Document ${documentId}: embedding ${chunks.length} chunks...`,
     )
 
-    const BATCH_SIZE = 100
-    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-      const batch = chunks.slice(i, i + BATCH_SIZE)
-      await this.embedBatch(batch)
+    try {
+      const BATCH_SIZE = 100
+      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+        await this.embedBatch(chunks.slice(i, i + BATCH_SIZE))
+      }
+      this.logger.log(`Document ${documentId}: embedding complete`)
+    } catch (error) {
+      this.logger.error(`Document ${documentId}: embedding failed`, error)
+      throw error
     }
-
-    this.logger.log(`Document ${documentId}: embedding complete`)
   }
 
   private async embedBatch(
@@ -47,7 +50,8 @@ export class EmbeddingService {
       input: texts,
     })
 
-    await Promise.all(
+    // Transaction thay vì Promise.all — tránh race condition
+    await this.prisma.$transaction(
       response.data.map((item, idx) => {
         const vector = `[${item.embedding.join(',')}]`
         return this.prisma.$executeRaw`
@@ -73,6 +77,6 @@ export class EmbeddingService {
   }
 
   private prepareText(text: string): string {
-    return text.replace(/\s+/g, ' ').trim().slice(0, 8000) // safety limit
+    return text.replace(/\s+/g, ' ').trim().slice(0, 8000)
   }
 }

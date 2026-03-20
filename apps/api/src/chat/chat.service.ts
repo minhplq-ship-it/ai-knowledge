@@ -135,24 +135,25 @@ export class ChatService {
   // ─────────────────────────────────────────────────────────
   // PRIVATE HELPERS
   // ─────────────────────────────────────────────────────────
-
   private buildPrompt(
     ragContext: string,
     history: { role: string; content: string }[],
     currentQuestion: string,
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
     const systemPrompt = ragContext
-      ? `Bạn là AI assistant thông minh. Trả lời dựa trên context được cung cấp.
-Nếu context không đủ thông tin, dùng kiến thức chung nhưng hãy nói rõ.
-Trả lời bằng ngôn ngữ của user. Trích dẫn nguồn khi có thể.
+      ? `Bạn là AI assistant. Chỉ trả lời DỰA TRÊN context dưới đây.
+Không sử dụng kiến thức bên ngoài context.
+Nếu context không có đủ thông tin để trả lời, hãy nói: "Tôi không tìm thấy thông tin này trong tài liệu của bạn."
+Trích dẫn nguồn khi có thể. Trả lời bằng ngôn ngữ của user.
 
 === KNOWLEDGE BASE CONTEXT ===
 ${ragContext}
 === END CONTEXT ===`
-      : `Bạn là AI assistant thông minh. Trả lời bằng ngôn ngữ của user.`
+      : `Bạn là AI assistant. Bạn chỉ trả lời dựa trên tài liệu mà user đã upload.
+Hiện tại không tìm thấy tài liệu nào liên quan đến câu hỏi này.
+Hãy thông báo cho user rằng họ cần upload tài liệu liên quan trước khi hỏi.`
 
     const historyMessages: OpenAI.Chat.ChatCompletionMessageParam[] = history
-      // bỏ tin nhắn cuối (chính là câu hỏi vừa lưu) để tránh duplicate
       .slice(0, -1)
       .map((msg) => ({
         role: msg.role === 'USER' ? 'user' : 'assistant',
@@ -165,7 +166,6 @@ ${ragContext}
       { role: 'user', content: currentQuestion },
     ]
   }
-
   private async maybeUpdateChatTitle(
     chatId: string,
     firstMessage: string,
