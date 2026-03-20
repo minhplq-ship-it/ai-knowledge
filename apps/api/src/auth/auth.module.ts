@@ -11,7 +11,7 @@ import { JwtTokenService } from './services/jwt-token.service'
 
 import { PrismaService } from '../prisma/prisma.service'
 import { EmailService } from 'src/mail/email.service'
-import { JwtAuthGuard } from './guards/jwt-auth.guard'
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard'
 
 @Module({
   imports: [

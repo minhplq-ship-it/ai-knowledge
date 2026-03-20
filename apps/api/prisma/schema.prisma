@@ -84,7 +84,7 @@ model Embedding {
 model Chat {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
-
+title     String   @default("New chat")
   userId String
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

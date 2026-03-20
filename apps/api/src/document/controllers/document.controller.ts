@@ -14,10 +14,11 @@ import {
 import { DocumentService } from '../services/document.service'
 import { CreateDocumentDto } from '../dto/create-document.dto'
 import { QueryDocumentDto } from '../dto/query-document.dto'
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard'
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { FileInterceptor } from '@nestjs/platform-express/multer/interceptors/file.interceptor'
 import { SearchDto } from '../dto/search.dto'
-import { SearchService } from '../search/search.service'
+import { SearchService } from '../services/search.service'
+import { Throttle } from '@nestjs/throttler/dist/throttler.decorator'
 
 @Controller('documents')
 @UseGuards(JwtAuthGuard)
@@ -34,6 +35,7 @@ export class DocumentController {
     return this.documentService.create(dto, userId)
   }
   @Post('upload')
+  @Throttle({ default: { ttl: 60000, limit: 20 } })
   @UseInterceptors(FileInterceptor('file'))
   async upload(@UploadedFile() file: Express.Multer.File, @Req() req) {
     const userId = req.user.id

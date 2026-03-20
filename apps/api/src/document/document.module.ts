@@ -3,15 +3,15 @@ import { DocumentController } from './controllers/document.controller'
 import { DocumentService } from './services/document.service'
 import { DocumentRepository } from './repositories/document.repository'
 import { PrismaService } from 'src/prisma/prisma.service'
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard'
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard'
 import { AuthModule } from 'src/auth/auth.module'
 import { ParserFactory } from './parsers/parser.factory'
 import { DocxParser } from './parsers/docx.parser'
 import { PdfParser } from './parsers/pdf.parser'
 import { TxtParser } from './parsers/txt.parser'
 import { DocumentProcessingService } from './services/document-processing.service'
-import { SearchService } from './search/search.service'
-import { EmbeddingService } from './embedding/embedding.service'
+import { SearchService } from './services/search.service'
+import { EmbeddingService } from './services/embedding.service'
 
 @Module({
   controllers: [DocumentController],
