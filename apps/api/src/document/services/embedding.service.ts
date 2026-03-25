@@ -1,4 +1,3 @@
-// src/document/services/embedding.service.ts
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from 'src/prisma/prisma.service'
 import OpenAI from 'openai'

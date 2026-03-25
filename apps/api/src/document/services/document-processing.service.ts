@@ -1,4 +1,3 @@
-// src/document/services/document-processing.service.ts
 import { Injectable, Logger } from '@nestjs/common'
 import { EmbeddingService } from 'src/document/services/embedding.service'
 import { PrismaService } from 'src/prisma/prisma.service'
