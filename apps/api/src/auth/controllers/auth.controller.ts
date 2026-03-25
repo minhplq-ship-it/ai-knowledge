@@ -39,10 +39,13 @@ export class AuthController {
   getMe(@Req() req: AuthRequest) {
     return req.user
   }
-
   @Post('logout')
   logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('accessToken')
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+    })
     return { message: 'Logged out' }
   }
 
