@@ -1,201 +1,91 @@
-import {
-  Injectable,
-  BadRequestException,
-  InternalServerErrorException,
-} from '@nestjs/common'
-
+import { Injectable, BadRequestException } from '@nestjs/common'
+import type { Response } from 'express'
 import { RegisterDto } from '../dto/register.dto'
 import { LoginDto } from '../dto/login.dto'
-import { VerifyEmailDto } from '../dto/verify-email.dto'
-
+import { ResetPasswordDto } from '../dto/reset-password.dto'
 import { UserRepository } from '../repositories/user.repository'
-import { VerificationRepository } from '../repositories/verification.repository'
-
 import { hashPassword, comparePassword } from '../utils/password.util'
 import { JwtTokenService } from './jwt-token.service'
-import {
-  generateOtp,
-  getOtpExpiry,
-  hashCode,
-  compareCode,
-} from '../utils/otp.util'
-
-import { EmailService } from 'src/mail/email.service'
+import { hashCode, compareCode } from '../utils/otp.util'
 
 @Injectable()
 export class AuthService {
   constructor(
     private userRepo: UserRepository,
-    private verificationRepo: VerificationRepository,
     private jwtService: JwtTokenService,
-    private emailService: EmailService,
   ) {}
+
   async register(dto: RegisterDto) {
-    try {
-      const existingUser = await this.userRepo.findByEmail(dto.email)
-      if (existingUser) throw new BadRequestException('Email already exists')
+    const existingUser = await this.userRepo.findByEmail(dto.email)
+    if (existingUser) throw new BadRequestException('Email already exists')
 
-      const passwordHash = await hashPassword(dto.password)
-      const user = await this.userRepo.create({
-        name: dto.name,
-        email: dto.email,
-        passwordHash,
-      })
+    const passwordHash = await hashPassword(dto.password)
+    const answerHash = await hashCode(dto.securityAnswer.toLowerCase().trim())
 
-      // --- Kiểm tra xem user có code EMAIL_VERIFY còn hạn không ---
-      const existingCode = await this.verificationRepo.findValidCodeByUser(
-        user.id,
-        'EMAIL_VERIFY',
-      )
-      if (existingCode) {
-        throw new BadRequestException(
-          `You already have a verification code. Please wait until it expires at ${existingCode.expiresAt.toLocaleTimeString()}`,
-        )
-      }
+    const user = await this.userRepo.create({
+      name: dto.name,
+      email: dto.email,
+      passwordHash,
+    })
 
-      // --- Tạo code mới ---
-      const code = generateOtp()
-      const hashedCode = await hashCode(code)
-      const expiresAt = getOtpExpiry(10) // 10 phút
+    await this.userRepo.updateSecurityQuestion(
+      user.id,
+      dto.securityQuestion,
+      answerHash,
+    )
 
-      await this.verificationRepo.create({
-        userId: user.id,
-        code: hashedCode,
-        type: 'EMAIL_VERIFY',
-        expiresAt,
-      })
+    await this.userRepo.updateEmailVerified(user.id)
 
-      await this.emailService.sendVerifyEmail({
-        email: user.email,
-        name: user.name,
-        code, // gửi plaintext
-      })
-
-      return { message: 'Verification email sent' }
-    } catch (err: any) {
-      if (err instanceof BadRequestException) throw err
-      throw new InternalServerErrorException(err.message)
-    }
+    return { message: 'Registration successful' }
   }
 
-  async login(dto: LoginDto) {
-    try {
-      const user = await this.userRepo.findByEmail(dto.email)
+  async login(dto: LoginDto, res: Response) {
+    const user = await this.userRepo.findByEmail(dto.email)
+    if (!user) throw new BadRequestException('Invalid credentials')
 
-      if (!user) {
-        throw new BadRequestException('Invalid credentials')
-      }
+    const valid = await comparePassword(dto.password, user.passwordHash)
+    if (!valid) throw new BadRequestException('Invalid credentials')
 
-      const valid = await comparePassword(dto.password, user.passwordHash)
+    const token = this.jwtService.generateToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    })
 
-      if (!user.isVerified) {
-        throw new BadRequestException('Email not verified')
-      }
+    res.cookie('accessToken', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 1 * 24 * 60 * 60 * 1000,
+    })
 
-      if (!valid) {
-        throw new BadRequestException('Invalid credentials')
-      }
-
-      const token = this.jwtService.generateToken({
-        sub: user.id,
-        email: user.email,
-        role: user.role,
-      })
-
-      return {
-        accessToken: token,
-      }
-    } catch (err: any) {
-      if (err instanceof BadRequestException) throw err
-      throw new InternalServerErrorException(err.message)
-    }
-  }
-  async verifyEmail(dto: VerifyEmailDto) {
-    try {
-      const user = await this.userRepo.findByEmail(dto.email)
-      if (!user) throw new BadRequestException('User not found')
-
-      const record = await this.verificationRepo.findValidCodeByUser(
-        user.id,
-        'EMAIL_VERIFY',
-      )
-      if (!record) throw new BadRequestException('Invalid or expired code')
-
-      const isValid = await compareCode(dto.code, record.code)
-      if (!isValid) throw new BadRequestException('Invalid or expired code')
-
-      await this.userRepo.updateEmailVerified(user.id)
-
-      await this.verificationRepo.delete(record.id)
-
-      return { message: 'Email verified successfully' }
-    } catch (err: any) {
-      if (err instanceof BadRequestException) throw err
-      throw new InternalServerErrorException(err.message)
-    }
+    return { message: 'Login successful' }
   }
 
-  async requestReset(email: string) {
-    try {
-      const user = await this.userRepo.findByEmail(email)
-      if (!user) throw new BadRequestException('User not found')
+  async getSecurityQuestion(email: string) {
+    const user = await this.userRepo.findSecurityQuestion(email)
+    if (!user) throw new BadRequestException('User not found')
+    if (!user.securityQuestion)
+      throw new BadRequestException('No security question set')
 
-      const existing = await this.verificationRepo.findValidCodeByUser(
-        user.id,
-        'PASSWORD_RESET',
-      )
-      if (existing) {
-        throw new BadRequestException(
-          `You already have a password reset code. Please wait until it expires at ${existing.expiresAt.toLocaleTimeString()}`,
-        )
-      }
-
-      const code = generateOtp()
-      const hashedCode = await hashCode(code)
-      const expiresAt = getOtpExpiry(10) // 10 phút
-
-      await this.verificationRepo.create({
-        userId: user.id,
-        code: hashedCode,
-        type: 'PASSWORD_RESET',
-        expiresAt,
-      })
-
-      await this.emailService.sendForgotPasswordEmail({
-        email: user.email,
-        name: user.name,
-        code,
-      })
-
-      return { message: 'Password reset email sent' }
-    } catch (err: any) {
-      if (err instanceof BadRequestException) throw err
-      throw new InternalServerErrorException(err.message)
-    }
+    return { securityQuestion: user.securityQuestion }
   }
-  async resetPassword(email: string, code: string, newPassword: string) {
-    try {
-      const user = await this.userRepo.findByEmail(email)
-      if (!user) throw new BadRequestException('User not found')
 
-      const record = await this.verificationRepo.findValidCodeByUser(
-        user.id,
-        'PASSWORD_RESET',
-      )
-      if (!record) throw new BadRequestException('Invalid or expired code')
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.userRepo.findSecurityQuestion(dto.email)
+    if (!user) throw new BadRequestException('User not found')
 
-      const isValid = await compareCode(code, record.code)
-      if (!isValid) throw new BadRequestException('Invalid or expired code')
+    const answerHash = user.securityAnswerHash
+    if (!answerHash) throw new BadRequestException('No security question set')
 
-      const passwordHash = await hashPassword(newPassword)
-      await this.userRepo.updatePassword(user.id, passwordHash)
+    const isValid = await compareCode(
+      dto.securityAnswer.toLowerCase().trim(),
+      answerHash,
+    )
+    if (!isValid) throw new BadRequestException('Wrong security answer')
 
-      await this.verificationRepo.delete(record.id)
+    const passwordHash = await hashPassword(dto.newPassword)
+    await this.userRepo.updatePassword(user.id, passwordHash)
 
-      return { message: 'Password reset successfully' }
-    } catch (err: any) {
-      if (err instanceof BadRequestException) throw err
-      throw new InternalServerErrorException(err.message)
-    }
+    return { message: 'Password reset successfully' }
   }
 }

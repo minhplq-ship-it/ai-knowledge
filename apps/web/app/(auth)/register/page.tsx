@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/stores/auth.store'
+import { api } from '@/lib/axios'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Bot, Loader2 } from 'lucide-react'
@@ -17,21 +18,32 @@ export default function RegisterPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [securityQuestion, setSecurityQuestion] = useState('')
+  const [securityAnswer, setSecurityAnswer] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name || !email || !password) return
+    if (!name || !email || !password || !securityQuestion || !securityAnswer)
+      return
     if (password.length < 6) {
       toast.error('Mật khẩu phải có ít nhất 6 ký tự')
+      return
+    }
+    if (securityQuestion.length < 5) {
+      toast.error('Câu hỏi bảo mật phải có ít nhất 5 ký tự')
+      return
+    }
+    if (securityAnswer.length < 2) {
+      toast.error('Câu trả lời bảo mật phải có ít nhất 2 ký tự')
       return
     }
 
     try {
       setLoading(true)
-      await register(name, email, password)
-      toast.success('Đăng ký thành công! Đang chuyển đến trang đăng nhập...')
-      router.push(`/verify-email?email=${encodeURIComponent(email)}`)
+      await register(name, email, password, securityQuestion, securityAnswer)
+      toast.success('Đăng ký thành công!')
+      router.push('/login')
     } catch {
       toast.error('Email đã được sử dụng')
     } finally {
@@ -42,14 +54,15 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-8">
-
         {/* Logo */}
         <div className="flex flex-col items-center gap-3">
           <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-primary">
             <Bot className="w-6 h-6 text-primary-foreground" />
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">Create account</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Create account
+            </h1>
             <p className="text-sm text-muted-foreground mt-1">
               Start building your AI knowledge base
             </p>
@@ -106,11 +119,43 @@ export default function RegisterPage() {
             />
           </div>
 
-          <Button
-            type="submit"
-            className="w-full h-10 mt-2"
-            disabled={loading}
-          >
+          {/* Security question */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="securityQuestion">
+              Security question
+            </label>
+            <Input
+              id="securityQuestion"
+              type="text"
+              placeholder="e.g. What is your pet's name?"
+              value={securityQuestion}
+              onChange={(e) => setSecurityQuestion(e.target.value)}
+              disabled={loading}
+              required
+              className="h-10 bg-secondary border-border"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="securityAnswer">
+              Security answer
+            </label>
+            <Input
+              id="securityAnswer"
+              type="text"
+              placeholder="Your answer"
+              value={securityAnswer}
+              onChange={(e) => setSecurityAnswer(e.target.value)}
+              disabled={loading}
+              required
+              className="h-10 bg-secondary border-border"
+            />
+            <p className="text-xs text-muted-foreground">
+              Used to recover your account if you forget your password
+            </p>
+          </div>
+
+          <Button type="submit" className="w-full h-10 mt-2" disabled={loading}>
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />

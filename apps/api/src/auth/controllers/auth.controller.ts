@@ -1,55 +1,60 @@
-import { Controller, Post, Body, Res, Req, Get, UseGuards } from '@nestjs/common'
-import type { Response } from 'express'
+// src/auth/auth.controller.ts
+import {
+  Controller,
+  Post,
+  Body,
+  Res,
+  Req,
+  Get,
+  UseGuards,
+} from '@nestjs/common'
+import type { Request, Response } from 'express'
 
 import { AuthService } from '../services/auth.service'
 import { RegisterDto } from '../dto/register.dto'
 import { LoginDto } from '../dto/login.dto'
-import { VerifyEmailDto } from '../dto/verify-email.dto'
-import { ForgotPasswordDto } from '../dto/forgot-password.dto'
 import { ResetPasswordDto } from '../dto/reset-password.dto'
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard'
+
+type AuthRequest = Request & {
+  user: { id: string; email: string; role: string }
+}
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  async register(@Body() dto: RegisterDto) {
+  register(@Body() dto: RegisterDto) {
     return this.authService.register(dto)
   }
 
-  @Post('verify-email')
-  async verifyEmail(@Body() dto: VerifyEmailDto) {
-    return this.authService.verifyEmail(dto)
+  @Post('login')
+  login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    return this.authService.login(dto, res)
   }
-  @Get('me')
+
   @UseGuards(JwtAuthGuard)
-  async me(@Req() req) {
+  @Get('me')
+  getMe(@Req() req: AuthRequest) {
     return req.user
   }
-  @Post('login')
-  async login(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const { accessToken } = await this.authService.login(dto)
 
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 1000 * 60 * 60 * 24,
-    })
-
-    return { message: 'Login successful' }
+  @Post('logout')
+  logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie('accessToken')
+    return { message: 'Logged out' }
   }
+
+  // Bước 1: lấy câu hỏi bảo mật
   @Post('forgot-password')
-  async forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.requestReset(dto.email)
+  getSecurityQuestion(@Body('email') email: string) {
+    return this.authService.getSecurityQuestion(email)
   }
 
+  // Bước 2: trả lời + đổi password
   @Post('reset-password')
-  async resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto.email, dto.code, dto.newPassword)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto)
   }
 }

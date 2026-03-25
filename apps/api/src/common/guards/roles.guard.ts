@@ -17,12 +17,9 @@ export class RolesGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     )
 
-    // Không có @Roles() thì cho qua
     if (!requiredRoles) return true
 
     const { user } = context.switchToHttp().getRequest()
-    console.log('Required roles:', requiredRoles) // ← thêm
-    console.log('User role:', user?.role) // ← thêm
 
     if (!requiredRoles.includes(user.role)) {
       throw new ForbiddenException('Bạn không có quyền thực hiện thao tác này')

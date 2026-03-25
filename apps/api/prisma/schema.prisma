@@ -18,7 +18,8 @@ model User {
   updatedAt    DateTime @updatedAt
 
   verificationCodes VerificationCode[]
-
+  securityQuestion   String?
+  securityAnswerHash String?
   documents Document[]
   chats     Chat[]
 }

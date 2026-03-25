@@ -44,4 +44,26 @@ export class UserRepository {
       where: { id },
     })
   }
+  async updateSecurityQuestion(
+    userId: string,
+    question: string,
+    answerHash: string,
+  ) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { securityQuestion: question, securityAnswerHash: answerHash },
+    })
+  }
+
+  async findSecurityQuestion(email: string) {
+    return this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        securityQuestion: true,
+        securityAnswerHash: true,
+      },
+    })
+  }
 }

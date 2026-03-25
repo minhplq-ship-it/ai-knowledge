@@ -31,7 +31,7 @@ export class DocumentController {
   @Post()
   async create(@Body() dto: CreateDocumentDto, @Req() req) {
     const userId = req.user.id
-    console.log('userId:', userId)
+
     return this.documentService.create(dto, userId)
   }
   @Post('upload')
