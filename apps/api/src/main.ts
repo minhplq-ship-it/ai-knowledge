@@ -10,11 +10,11 @@ async function bootstrap() {
   app.use(cookieParser())
 
   app.enableCors({
-    origin: 'http://localhost:3000', // ← port Next.js
+    origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
     credentials: true,
   })
 
-  await app.listen(3001)
+  await app.listen(process.env.API_PORT ?? 3001)
 }
 
 bootstrap()
