@@ -20,10 +20,11 @@ export class SearchService {
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
   ) {}
+
   async search(
     query: string,
     userId: string,
-    topK = 5,
+    topK = 8,
   ): Promise<SearchResult[]> {
     const queryVector = await this.embeddingService.embedQuery(query)
     const vectorStr = `[${queryVector.join(',')}]`
@@ -39,7 +40,7 @@ export class SearchService {
     JOIN "DocumentChunk" dc ON dc.id = e."chunkId"
     JOIN "Document"      d  ON d.id  = dc."documentId"
     WHERE d."userId" = ${userId}
-      AND (1 - (e.vector <=> ${vectorStr}::vector)) > 0.5
+      AND (1 - (e.vector <=> ${vectorStr}::vector)) > 0.35
     ORDER BY e.vector <=> ${vectorStr}::vector
     LIMIT ${topK}
   `
@@ -51,11 +52,26 @@ export class SearchService {
     question: string,
     userId: string,
   ): Promise<{ answer: string; sources: SearchResult[] }> {
-    const sources = await this.search(question, userId, 5)
+    const sources = await this.search(question, userId, 8)
 
+    // Fallback thông minh khi không tìm được chunk liên quan
     if (!sources.length) {
+      const fallback = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `Bạn là AI assistant. User đang hỏi về knowledge base của họ nhưng không tìm thấy tài liệu liên quan. Hãy thông báo lịch sự và gợi ý họ upload tài liệu liên quan. Trả lời ngắn gọn bằng ngôn ngữ của câu hỏi.`,
+          },
+          { role: 'user', content: question },
+        ],
+        max_tokens: 300,
+        temperature: 0.3,
+      })
+
       return {
         answer:
+          fallback.choices[0].message.content ??
           'Không tìm thấy thông tin liên quan trong knowledge base của bạn.',
         sources: [],
       }
@@ -70,9 +86,16 @@ export class SearchService {
       messages: [
         {
           role: 'system',
-          content: `Bạn là AI assistant. Trả lời câu hỏi của user DỰA TRÊN context được cung cấp.
-Nếu context không đủ thông tin, hãy nói rõ.
-Trích dẫn nguồn khi có thể (ví dụ: "Theo [Nguồn 1]...").
+          content: `Bạn là AI assistant phân tích tài liệu.
+
+NGUYÊN TẮC:
+- Ưu tiên trả lời DỰA TRÊN context được cung cấp
+- Nếu câu hỏi liên quan gián tiếp, được phép SUY LUẬN MỞ RỘNG hợp lý từ context
+- Nếu câu hỏi yêu cầu SO SÁNH, liệt kê điểm giống → khác → kết luận
+- Nếu context hoàn toàn không liên quan, trả lời: "Tài liệu của bạn không đề cập đến vấn đề này"
+- KHÔNG bịa đặt thông tin không có cơ sở trong context
+- Trích dẫn nguồn cụ thể khi sử dụng thông tin (ví dụ: "Theo [Nguồn 1]...")
+
 Trả lời bằng ngôn ngữ của câu hỏi.`,
         },
         {
@@ -81,19 +104,21 @@ Trả lời bằng ngôn ngữ của câu hỏi.`,
         },
       ],
       temperature: 0.3,
-      max_tokens: 1000,
+      max_tokens: 1500,
     })
 
     const answer =
       completion.choices[0].message.content ?? 'Không có câu trả lời.'
+
     this.logger.log(
       `RAG: question="${question}" → ${sources.length} sources used`,
     )
 
     return { answer, sources }
   }
+
   async buildRagContext(query: string, userId: string): Promise<string> {
-    const results = await this.search(query, userId, 5)
+    const results = await this.search(query, userId, 8)
     if (!results.length) return ''
 
     return results

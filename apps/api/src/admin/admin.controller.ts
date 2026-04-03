@@ -1,4 +1,3 @@
-// src/admin/admin.controller.ts
 import {
   Controller,
   Get,
@@ -13,8 +12,8 @@ import { RolesGuard } from 'src/common/guards/roles.guard'
 import { Roles } from 'src/common/decorators/roles.decorator'
 
 @Controller('admin')
-@UseGuards(JwtAuthGuard, RolesGuard) // JWT trước, sau đó check role
-@Roles('ADMIN') // toàn bộ controller chỉ ADMIN mới vào được
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 

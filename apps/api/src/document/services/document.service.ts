@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException } from '@nestjs/common'
+import {
+  Injectable,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common'
 import { DocumentRepository } from '../repositories/document.repository'
 import { CreateDocumentDto } from '../dto/create-document.dto'
 import { QueryDocumentDto } from '../dto/query-document.dto'
@@ -24,26 +28,40 @@ export class DocumentService {
 
     return doc
   }
-
   async createFromFile(file: Express.Multer.File, userId: string) {
     if (!file) {
       throw new BadRequestException('File is required')
     }
 
-    const parser = this.parserFactory.getParser(file)
-    const content = await parser.parse(file)
+    try {
+      const parser = this.parserFactory.getParser(file)
+      const content = await parser.parse(file)
 
-    const doc = await this.repository.create({
-      title: file.originalname,
-      content,
-      user: {
-        connect: { id: userId },
-      },
-    })
+      const doc = await this.repository.create({
+        title: file.originalname,
+        content,
+        user: {
+          connect: { id: userId },
+        },
+      })
 
-    await this.processingService.process(doc.id)
+      try {
+        await this.processingService.process(doc.id)
+      } catch (processingError) {
+        console.error(`Processing failed for doc ${doc.id}:`, processingError)
+      }
 
-    return doc
+      return doc
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error
+      }
+
+      console.error('createFromFile failed:', error)
+      throw new InternalServerErrorException(
+        'Failed to create document from file',
+      )
+    }
   }
 
   async findAll(query: QueryDocumentDto, userId: string) {

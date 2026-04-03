@@ -1,4 +1,3 @@
-// src/admin/admin.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { UserRepository } from 'src/auth/repositories/user.repository'
 
@@ -10,28 +9,12 @@ export class AdminService {
     private readonly userRepository: UserRepository,
     private readonly documentRepository: DocumentRepository,
   ) {}
+  async getAllUsers(page = 1, limit = 20) {
+    const skip = (page - 1) * limit
 
-  // ─────────────────────────────────────────────────────────
-  // USER MANAGEMENT
-  // ─────────────────────────────────────────────────────────
-
-  async getAllUsers() {
-    return this.userRepository['prisma'].user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isVerified: true,
-        createdAt: true,
-        _count: {
-          select: {
-            documents: true,
-            chats: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
+    return this.userRepository.findAllUsers({
+      skip,
+      take: limit,
     })
   }
 
@@ -50,10 +33,6 @@ export class AdminService {
     await this.userRepository.delete(id)
     return { message: `User ${id} deleted` }
   }
-
-  // ─────────────────────────────────────────────────────────
-  // DOCUMENT MANAGEMENT
-  // ─────────────────────────────────────────────────────────
 
   async getAllDocuments(page = 1, limit = 20) {
     const skip = (page - 1) * limit

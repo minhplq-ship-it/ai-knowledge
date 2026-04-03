@@ -27,43 +27,73 @@ export class DocumentProcessingService {
     documentId: string,
     config: ChunkingConfig = DEFAULT_CONFIG,
   ): Promise<void> {
-    const document = await this.prisma.document.findUnique({
-      where: { id: documentId },
-    })
+    // Bước 1: Lấy document
+    let document
+    try {
+      document = await this.prisma.document.findUnique({
+        where: { id: documentId },
+      })
+    } catch (error) {
+      this.logger.error(`Failed to fetch document ${documentId}`, error)
+      throw error
+    }
 
     if (!document?.content?.trim()) {
       this.logger.warn(`Document ${documentId} not found or empty — skipping`)
       return
     }
 
-    const chunks = this.buildChunks(document.content, config)
+    // Bước 2: Build chunks
+    let chunks: ChunkResult[]
+    try {
+      chunks = this.buildChunks(document.content, config)
+    } catch (error) {
+      this.logger.error(
+        `Failed to build chunks for document ${documentId}`,
+        error,
+      )
+      throw error
+    }
 
     if (!chunks.length) {
-      this.logger.warn(
-        `Document ${documentId} produced 0 chunks after processing`,
-      )
+      this.logger.warn(`Document ${documentId} produced 0 chunks — skipping`)
       return
     }
 
-    await this.prisma.$transaction([
-      this.prisma.documentChunk.deleteMany({ where: { documentId } }),
-      this.prisma.documentChunk.createMany({
-        data: chunks.map((chunk, index) => ({
-          content: chunk.text,
-          chunkIndex: index,
-          documentId: document.id,
-          metadata: JSON.stringify({
-            charStart: chunk.charStart,
-            charEnd: chunk.charEnd,
-            tokenEstimate: chunk.tokenEstimate,
-          }),
-          createdAt: new Date(),
-        })),
-      }),
-    ])
+    // Bước 3: Lưu chunks — lỗi ở đây thì throw, chưa có gì được lưu
+    try {
+      await this.prisma.$transaction([
+        this.prisma.documentChunk.deleteMany({ where: { documentId } }),
+        this.prisma.documentChunk.createMany({
+          data: chunks.map((chunk, index) => ({
+            content: chunk.text,
+            chunkIndex: index,
+            documentId: document.id,
+            metadata: JSON.stringify({
+              charStart: chunk.charStart,
+              charEnd: chunk.charEnd,
+              tokenEstimate: chunk.tokenEstimate,
+            }),
+            createdAt: new Date(),
+          })),
+        }),
+      ])
+    } catch (error) {
+      this.logger.error(
+        `Failed to save chunks for document ${documentId}`,
+        error,
+      )
+      throw error
+    }
 
     this.logger.log(`Document ${documentId}: processed ${chunks.length} chunks`)
-    await this.embeddingService.embedDocument(documentId)
+
+    // Bước 4: Embedding — chunks đã lưu rồi, lỗi ở đây chỉ log, không throw
+    try {
+      await this.embeddingService.embedDocument(documentId)
+    } catch (error) {
+      this.logger.error(`Failed to embed document ${documentId}`, error)
+    }
   }
 
   private buildChunks(raw: string, config: ChunkingConfig): ChunkResult[] {
@@ -71,19 +101,55 @@ export class DocumentProcessingService {
     const sentences = this.splitSentences(text)
     return this.packChunksWithOverlap(sentences, config)
   }
-
   private normalizeText(text: string): string {
-    return text
-      .replace(/\r\n/g, '\n')
-      .replace(/\r/g, '\n')
-      .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '')
-      .replace(/[\u2018\u2019]/g, "'")
-      .replace(/[\u201C\u201D]/g, '"')
-      .replace(/[\u2013\u2014]/g, ' - ')
-      .replace(/\n{2,}/g, '\n\n')
-      .replace(/([^\n])\n([^\n])/g, '$1 $2')
-      .replace(/[^\S\n]+/g, ' ')
-      .trim()
+    return (
+      text
+        // ── 1. Chuẩn hóa line endings ──────────────────────────────
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+
+        // ── 2. Fix mojibake (UTF-8 bị decode sai thành Latin-1) ────
+        .replace(/â€™/g, "'")
+        .replace(/â€œ|â€/g, '"')
+        .replace(/â€"/g, '—')
+        .replace(/â€"/g, '–')
+        .replace(/Â½/g, '½')
+        .replace(/Â¼/g, '¼')
+        .replace(/Â¾/g, '¾')
+        .replace(/Â°/g, '°')
+
+        // ── 3. Strip markdown links → giữ lại text, bỏ URL ─────────
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+
+        // ── 4. Strip URLs thừa còn sót lại ──────────────────────────
+        .replace(/https?:\/\/\S+/g, '')
+
+        // ── 5. Strip metadata header kiểu "User: 1 Assistant: #" ───
+        .replace(/^#.*$/gm, '')
+        .replace(/^(User|Assistant)\s*:\s*.*/gm, '')
+
+        // ── 6. Strip ký tự vô hình và zero-width ────────────────────
+        .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '')
+
+        // ── 7. Chuẩn hóa quotes và dashes ───────────────────────────
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/[\u2013\u2014]/g, ' - ')
+
+        // ── 8. Gộp nhiều newline → tối đa 2 ────────────────────────
+        .replace(/\n{2,}/g, '\n\n')
+
+        // ── 9. Gộp newline đơn giữa 2 dòng text thường ──────────────
+        .replace(/([^\n])\n([^\n])/g, '$1 $2')
+
+        // ── 10. Gộp nhiều space thừa ────────────────────────────────
+        .replace(/[^\S\n]+/g, ' ')
+
+        // ── 11. Strip dòng trống thừa sau khi xử lý ─────────────────
+        .replace(/\n\s*\n\s*\n/g, '\n\n')
+
+        .trim()
+    )
   }
 
   private splitSentences(text: string): string[] {

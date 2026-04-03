@@ -44,6 +44,27 @@ export class UserRepository {
       where: { id },
     })
   }
+  async findAllUsers({ skip, take }: { skip: number; take: number }) {
+    return this.prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isVerified: true,
+        createdAt: true,
+        _count: {
+          select: {
+            documents: true,
+            chats: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+    })
+  }
   async updateSecurityQuestion(
     userId: string,
     question: string,
