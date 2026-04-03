@@ -52,16 +52,20 @@ export class SearchService {
     question: string,
     userId: string,
   ): Promise<{ answer: string; sources: SearchResult[] }> {
-    const sources = await this.search(question, userId, 8)
+    // Detect ngôn ngữ từ câu hỏi — nói thẳng với GPT thay vì "ngôn ngữ của câu hỏi"
+    const hasEnglish = /[a-zA-Z]{3,}/.test(question)
+    const language = hasEnglish ? 'English' : 'Vietnamese'
 
-    // Fallback thông minh khi không tìm được chunk liên quan
+    const rawSources = await this.search(question, userId, 8)
+    const sources = this.deduplicateSources(rawSources)
+
     if (!sources.length) {
       const fallback = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: `Bạn là AI assistant. User đang hỏi về knowledge base của họ nhưng không tìm thấy tài liệu liên quan. Hãy thông báo lịch sự và gợi ý họ upload tài liệu liên quan. Trả lời ngắn gọn bằng ngôn ngữ của câu hỏi.`,
+            content: `Bạn là AI assistant. User đang hỏi về knowledge base của họ nhưng không tìm thấy tài liệu liên quan. Hãy thông báo lịch sự và gợi ý họ upload tài liệu liên quan. QUAN TRỌNG: Bắt buộc trả lời bằng ${language}.`,
           },
           { role: 'user', content: question },
         ],
@@ -96,7 +100,7 @@ NGUYÊN TẮC:
 - KHÔNG bịa đặt thông tin không có cơ sở trong context
 - Trích dẫn nguồn cụ thể khi sử dụng thông tin (ví dụ: "Theo [Nguồn 1]...")
 
-Trả lời bằng ngôn ngữ của câu hỏi.`,
+QUAN TRỌNG: Bắt buộc trả lời bằng ${language}.`,
         },
         {
           role: 'user',
@@ -115,6 +119,17 @@ Trả lời bằng ngôn ngữ của câu hỏi.`,
     )
 
     return { answer, sources }
+  }
+
+  private deduplicateSources(sources: SearchResult[]): SearchResult[] {
+    const seen = new Map<string, SearchResult>()
+    for (const source of sources) {
+      const existing = seen.get(source.documentId)
+      if (!existing || source.similarity > existing.similarity) {
+        seen.set(source.documentId, source)
+      }
+    }
+    return Array.from(seen.values())
   }
 
   async buildRagContext(query: string, userId: string): Promise<string> {
