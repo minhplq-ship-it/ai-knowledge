@@ -48,13 +48,11 @@ export class AuthController {
     return { message: 'Logged out' }
   }
 
-  // Bước 1: lấy câu hỏi bảo mật
   @Post('forgot-password')
   getSecurityQuestion(@Body('email') email: string) {
     return this.authService.getSecurityQuestion(email)
   }
 
-  // Bước 2: trả lời + đổi password
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto)

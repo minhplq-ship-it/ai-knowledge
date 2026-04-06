@@ -1,7 +1,16 @@
-import { IsString, IsNotEmpty } from 'class-validator'
+import { IsEnum, IsOptional, IsString } from 'class-validator'
+
+export enum SearchMode {
+  DOCUMENT = 'document',
+  WEB = 'web',
+  HYBRID = 'hybrid',
+}
 
 export class SendMessageDto {
   @IsString()
-  @IsNotEmpty()
   content: string
+
+  @IsEnum(SearchMode)
+  @IsOptional()
+  searchMode: SearchMode = SearchMode.HYBRID // default hybrid
 }

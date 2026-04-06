@@ -28,7 +28,7 @@ import { EmbeddingService } from './services/embedding.service'
     EmbeddingService,
     SearchService,
   ],
-  exports: [DocumentService, SearchService],
+  exports: [DocumentService, SearchService, DocumentProcessingService],
   imports: [AuthModule],
 })
 export class DocumentModule {}

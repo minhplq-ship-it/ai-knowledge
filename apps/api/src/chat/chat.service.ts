@@ -1,15 +1,16 @@
-// src/chat/chat.service.ts
 import { Injectable, NotFoundException, Logger } from '@nestjs/common'
 import { PrismaService } from 'src/prisma/prisma.service'
 import {
   SearchService,
   SearchResult,
 } from 'src/document/services/search.service'
+import { WebSearchService } from 'src/web/services/web-search.service'
 import { CreateChatDto } from './dto/create-chat.dto'
-import { SendMessageDto } from './dto/send-message.dto'
+import { SendMessageDto, SearchMode } from './dto/send-message.dto'
 import OpenAI from 'openai'
 
 const HISTORY_LIMIT = 10
+const SIMILARITY_THRESHOLD = 0.5
 
 @Injectable()
 export class ChatService {
@@ -19,6 +20,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly searchService: SearchService,
+    private readonly webSearchService: WebSearchService,
   ) {}
 
   async createChat(dto: CreateChatDto, userId: string) {
@@ -76,18 +78,16 @@ export class ChatService {
       take: HISTORY_LIMIT,
     })
 
-    // Lấy cả sources lẫn context để lưu vào metadata
-    const sources = await this.searchService.search(dto.content, userId, 5)
-    const ragContext = sources.length
-      ? sources
-          .map((r, i) => `[Nguồn ${i + 1} - ${r.documentTitle}]\n${r.content}`)
-          .join('\n\n---\n\n')
-      : ''
+    const { ragContext, sources, searchMode } = await this.buildContext(
+      dto.content,
+      userId,
+      dto.searchMode ?? SearchMode.HYBRID,
+    )
 
     const messages = this.buildPrompt(ragContext, history, dto.content)
 
     this.logger.log(
-      `Chat ${chatId}: ${history.length} history msgs, ${sources.length} sources`,
+      `Chat ${chatId}: mode=${searchMode}, history=${history.length}, sources=${sources.length}`,
     )
 
     const completion = await this.openai.chat.completions.create({
@@ -99,29 +99,101 @@ export class ChatService {
 
     const assistantContent = completion.choices[0].message.content ?? ''
 
-    // Lưu sources vào metadata — FE dùng để hiện citation
     const assistantMessage = await this.prisma.chatMessage.create({
       data: {
         chatId,
         role: 'ASSISTANT',
         content: assistantContent,
-        metadata: sources.length
-          ? {
-              sources: sources.map((s) => ({
-                chunkId: s.chunkId,
-                documentId: s.documentId,
-                documentTitle: s.documentTitle,
-                content: s.content,
-                similarity: s.similarity,
-              })),
-            }
-          : undefined,
+        metadata: {
+          searchMode,
+          sources: sources.map((s) => ({
+            chunkId: s.chunkId,
+            documentId: s.documentId,
+            documentTitle: s.documentTitle,
+            content: s.content,
+            similarity: s.similarity,
+          })),
+        },
       },
     })
 
     await this.maybeUpdateChatTitle(chatId, dto.content, history.length)
 
     return assistantMessage
+  }
+
+  private async buildContext(
+    question: string,
+    userId: string,
+    searchMode: SearchMode,
+  ): Promise<{
+    ragContext: string
+    sources: SearchResult[]
+    searchMode: SearchMode
+  }> {
+    if (searchMode === SearchMode.DOCUMENT) {
+      const sources = await this.searchService.search(question, userId, 5)
+      return {
+        ragContext: this.formatSources(sources),
+        sources,
+        searchMode,
+      }
+    }
+
+    if (searchMode === SearchMode.WEB) {
+      const webResults = await this.webSearchService.search(question, 3)
+      const ragContext = this.webSearchService.buildContext(webResults)
+      // Web results không có chunkId/documentId — map về SearchResult tạm
+      const sources = webResults.map((r) => ({
+        chunkId: '',
+        documentId: '',
+        documentTitle: r.title,
+        content: r.content,
+        similarity: 1,
+      }))
+      return { ragContext, sources, searchMode }
+    }
+
+    // HYBRID — search KB trước, fallback web nếu không đủ tốt
+    const sources = await this.searchService.search(question, userId, 5)
+    const hasGoodResult = sources.some(
+      (s) => s.similarity > SIMILARITY_THRESHOLD,
+    )
+
+    if (hasGoodResult) {
+      return {
+        ragContext: this.formatSources(sources),
+        sources,
+        searchMode,
+      }
+    }
+
+    // KB không đủ tốt → fallback web
+    this.logger.log(`Hybrid fallback to web search for: "${question}"`)
+    const webResults = await this.webSearchService.search(question, 3)
+    const webContext = this.webSearchService.buildContext(webResults)
+    const webSources = webResults.map((r) => ({
+      chunkId: '',
+      documentId: '',
+      documentTitle: r.title,
+      content: r.content,
+      similarity: 1,
+    }))
+
+    // Gộp cả 2 nếu KB có kết quả dù không đủ tốt
+    const allSources = [...sources, ...webSources]
+    const allContext = [this.formatSources(sources), webContext]
+      .filter(Boolean)
+      .join('\n\n---\n\n')
+
+    return { ragContext: allContext, sources: allSources, searchMode }
+  }
+
+  private formatSources(sources: SearchResult[]): string {
+    if (!sources.length) return ''
+    return sources
+      .map((r, i) => `[Nguồn ${i + 1} - ${r.documentTitle}]\n${r.content}`)
+      .join('\n\n---\n\n')
   }
 
   private buildPrompt(

@@ -22,6 +22,7 @@ model User {
   securityAnswerHash String?
   documents Document[]
   chats     Chat[]
+  webSources WebSource[]
 }
 enum Role {
   USER
@@ -56,6 +57,8 @@ model Document {
 
   userId String
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  webSourceId String?
+  webSource   WebSource? @relation(fields: [webSourceId], references: [id], onDelete: SetNull)
 
   chunks DocumentChunk[]
 }
@@ -106,4 +109,33 @@ enum MessageRole {
   USER
   ASSISTANT
   SYSTEM
+}
+model WebSource {
+  id          String      @id @default(uuid())
+  url         String
+  scope       CrawlScope  @default(SUBDOMAIN)
+  pageLimit   Int         @default(200)
+  autoRecrawl Boolean     @default(false)
+  status      CrawlStatus @default(PENDING)
+  crawledAt   DateTime?
+  pageCount   Int         @default(0)
+  createdAt   DateTime    @default(now())
+
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  documents Document[]
+}
+
+enum CrawlScope {
+  SINGLE_PAGE
+  PATH_PREFIX
+  SUBDOMAIN
+}
+
+enum CrawlStatus {
+  PENDING
+  CRAWLING
+  READY
+  ERROR
 }

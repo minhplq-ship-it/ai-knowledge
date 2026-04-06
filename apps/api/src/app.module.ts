@@ -7,6 +7,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler'
 import { APP_GUARD, Reflector } from '@nestjs/core'
 import { CustomThrottlerGuard } from './common/guards/throttler.guard'
 import { AdminModule } from './admin/admin.module'
+import { WebModule } from './web/web.module'
 
 @Module({
   imports: [
@@ -14,10 +15,11 @@ import { AdminModule } from './admin/admin.module'
     DocumentModule,
     ChatModule,
     AdminModule,
+    WebModule,
     ThrottlerModule.forRoot([
       {
-        ttl: 60000, 
-        limit: 100, 
+        ttl: 60000,
+        limit: 100,
       },
     ]),
     ConfigModule.forRoot({
@@ -25,9 +27,12 @@ import { AdminModule } from './admin/admin.module'
     }),
   ],
   controllers: [],
-  providers: [Reflector, {
+  providers: [
+    Reflector,
+    {
       provide: APP_GUARD,
-      useClass: CustomThrottlerGuard,  
-    },],
+      useClass: CustomThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

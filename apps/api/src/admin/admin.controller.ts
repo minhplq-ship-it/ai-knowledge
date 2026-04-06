@@ -17,25 +17,21 @@ import { Roles } from 'src/common/decorators/roles.decorator'
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
-  // GET /admin/users
   @Get('users')
   getAllUsers() {
     return this.adminService.getAllUsers()
   }
 
-  // GET /admin/users/:id
   @Get('users/:id')
   getUserById(@Param('id') id: string) {
     return this.adminService.getUserById(id)
   }
 
-  // DELETE /admin/users/:id
   @Delete('users/:id')
   deleteUser(@Param('id') id: string) {
     return this.adminService.deleteUser(id)
   }
 
-  // GET /admin/documents?page=1&limit=20
   @Get('documents')
   getAllDocuments(
     @Query('page') page?: string,
@@ -47,7 +43,6 @@ export class AdminController {
     )
   }
 
-  // DELETE /admin/documents/:id
   @Delete('documents/:id')
   deleteDocument(@Param('id') id: string) {
     return this.adminService.deleteDocument(id)

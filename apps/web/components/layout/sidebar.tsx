@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { cn } from '@/lib/utils'
 import {
   MessageSquare,
-  FileText,
+  BookOpen,
   Search,
   LogOut,
   Bot,
@@ -20,7 +20,7 @@ import { Separator } from '@/components/ui/separator'
 
 const navItems = [
   { href: '/chat', icon: MessageSquare, label: 'Chat' },
-  { href: '/documents', icon: FileText, label: 'Documents' },
+  { href: '/knowledge', icon: BookOpen, label: 'Knowledge Sources' },
   { href: '/search', icon: Search, label: 'Search' },
 ]
 
@@ -41,7 +41,9 @@ export function Sidebar() {
         <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary">
           <Bot className="w-4 h-4 text-primary-foreground" />
         </div>
-        <span className="font-semibold text-sm tracking-tight">AI Knowledge</span>
+        <span className="font-semibold text-sm tracking-tight">
+          AI Knowledge
+        </span>
       </div>
 
       <Separator style={{ backgroundColor: 'hsl(var(--sidebar-border))' }} />
@@ -75,13 +77,6 @@ export function Sidebar() {
                   ? 'bg-secondary text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground',
               )}
-              style={
-                !active
-                  ? {
-                      ['--hover-bg' as string]: 'hsl(var(--sidebar-hover))',
-                    }
-                  : {}
-              }
             >
               <item.icon className="w-4 h-4 shrink-0" />
               {item.label}
@@ -123,7 +118,9 @@ export function Sidebar() {
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user?.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {user?.email}
+            </p>
           </div>
           <Button
             variant="ghost"
